@@ -208,7 +208,7 @@ func runCLIMenu(cfg *cliConfig) {
 		fmt.Println("  2. 启动（自定义参数）")
 		fmt.Println("  3. 修改配置参数")
 		fmt.Printf("  4. 定时任务（%s）\n", status)
-		fmt.Println("  5. 嚮助")
+		fmt.Println("  5. 帮助")
 		fmt.Println("  6. 退出")
 		fmt.Print("请选择> ")
 		line, outcome := readMenuLine()

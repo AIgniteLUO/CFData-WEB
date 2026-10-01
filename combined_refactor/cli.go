@@ -192,11 +192,13 @@ var (
 		{name: "user", description: "Web 认证用户名（不设置则不启用认证）", defaultValue: ""},
 		{name: "password", description: "Web 认证密码（需同时设置 -user）", defaultValue: ""},
 		{name: "session", description: "Web 登录会话有效期（分钟）", defaultValue: "720"},
+		{name: "host", description: "服务监听地址；留空监听全部地址，Android APK 建议使用 127.0.0.1", defaultValue: ""},
 		{name: "mode", description: "运行模式：official 或 nsb", defaultValue: "official"},
-		{name: "threads", description: "扫描并发数", defaultValue: "100"},
+		{name: "scanmode", description: "扫描方式：tcping（默认，TCP 握手延迟）或 httping（HTTP TTFB，延迟比 tcping 高属正常，不同模式数据不可对比）", defaultValue: "tcping"},
 		{name: "out", description: "输出文件名", defaultValue: "ip.csv"},
 		{name: "progress", description: "是否输出进度日志", defaultValue: "true"},
 		{name: "nocolor", description: "禁用颜色输出（cmd 等不支持 ANSI 的终端可开启避免乱码）", defaultValue: "false"},
+		{name: "skipgeo", description: "跳过地区/代理环境验证，CLI 启动测试前不再确认代理警告", defaultValue: "false"},
 		{name: "url", description: "测速下载地址；auto 表示由后端自动选择内置测速源", defaultValue: autoSpeedURLValue},
 		{name: "dns", description: "自定义 DNS 服务器，例如 1.1.1.1 或 223.5.5.5,8.8.8.8；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS", defaultValue: defaultDNSServers},
 		{name: "debug", description: "调试输出等级：error、all；true 等同 error", defaultValue: "false"},
@@ -226,17 +228,23 @@ var (
 	}
 	cliOfficialFlags = []cliFlagInfo{
 		{name: "offiptype", description: "官方模式 IP 类型：4 或 6", defaultValue: "4"},
+		{name: "offthreads", description: "官方模式扫描并发数", defaultValue: "100"},
 		{name: "offport", description: "官方模式详细测试与测速端口", defaultValue: "443"},
 		{name: "offdelay", description: "官方模式延迟阈值（毫秒）", defaultValue: "500"},
 		{name: "offdc", description: "指定数据中心；不填时自动选择最低延迟数据中心", defaultValue: ""},
 		{name: "offspeedlimit", description: "官方模式测速达标结果上限；0 表示关闭官方测速", defaultValue: "5"},
 		{name: "offspeedmin", description: "官方模式测速达标下限，单位 MB/s", defaultValue: "0.1"},
+		{name: "offurl", description: "官方模式测速下载地址；auto 表示由后端自动选择内置测速源", defaultValue: autoSpeedURLValue},
 	}
 	cliNSBFlags = []cliFlagInfo{
 		{name: "nsbfile", description: "非标模式输入文件路径", defaultValue: ""},
 		{name: "nsbsourceurl", description: "非标模式网络输入 URL", defaultValue: ""},
-		{name: "nsbspeedtest", description: "非标测速线程数；0 表示不测速。多 IP 并发影响实际速度，需要准确应设为 1", defaultValue: "0"},
+		{name: "nsbthreads", description: "非标模式扫描并发数", defaultValue: "100"},
+		{name: "nsbdelay", description: "非标模式延迟阈值（毫秒）", defaultValue: "500"},
+		{name: "nsbfallbackport", description: "非标输入缺省端口；不填时随 TLS 自动使用 443/80", defaultValue: "0"},
 		{name: "nsbdc", description: "非标模式指定结果数据中心；留空不限制", defaultValue: ""},
+		{name: "nsbspeedtest", description: "非标测速线程数；0 表示不测速。多 IP 并发影响实际速度，需要准确应设为 1", defaultValue: "0"},
+		{name: "nsburl", description: "非标模式测速下载地址；auto 表示由后端自动选择内置测速源", defaultValue: autoSpeedURLValue},
 		{name: "nsbtls", description: "非标模式是否启用 TLS", defaultValue: "true"},
 		{name: "nsbcompact", description: "非标模式导出精简表格列", defaultValue: "true"},
 		{name: "nsbresultlimit", description: "非标模式延迟测试结果上限；必须为非 0 正整数", defaultValue: "1000"},
@@ -761,20 +769,17 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "scanmode", Description: "扫描方式；tcping：仅测量 TCP 握手延迟（默认），httping：测量 HTTP TTFB 全链路延迟，延迟比 tcping 高属正常，不同模式数据不可互相比较", Default: "tcping", Options: []string{"tcping", "httping"}},
 		{Name: "offiptype", Description: "官方模式 IP 类型", Default: "4", Options: []string{"4", "6"}},
 		{Name: "offthreads", Description: "官方扫描并发数", Default: "100"},
-		{Name: "nsbthreads", Description: "非标扫描并发数", Default: "100"},
 		{Name: "out", Description: "输出文件名", Default: "ip.csv"},
 		{Name: "nsbspeedtest", Description: "非标测速线程数；0 表示不测速。多 IP 并发影响实际速度，需要准确应设为 1", Default: "0"},
 		{Name: "progress", Description: "输出进度日志", Default: "true", Options: []string{"true", "false"}},
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
 		{Name: "skipgeo", Description: "跳过地区/代理环境验证（等同命令行 -skipgeo）", Default: "false", Options: []string{"true", "false"}},
 		{Name: "offurl", Description: "官方测速下载地址；auto 表示由后端自动选择内置测速源", Default: autoSpeedURLValue},
-		{Name: "nsburl", Description: "非标测速下载地址", Default: autoSpeedURLValue},
 		{Name: "dns", Description: "自定义 DNS 服务器；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: defaultDNSServers},
 		{Name: "debug", Description: "调试输出等级；error 记录程序错误和下载/更新/API 异常，all 额外包含测速失败等全部明细", Default: "false", Options: []string{"false", "error", "all", "true"}},
 		{Name: "compactipv4", Description: "精简本地 IPv4 地址库并覆盖 ips-v4.txt", Default: "false", Options: []string{"true", "false"}},
 		{Name: "offport", Description: "官方模式测试端口", Default: "443"},
 		{Name: "offdelay", Description: "官方延迟阈值，单位毫秒", Default: "500"},
-		{Name: "nsbdelay", Description: "非标延迟阈值，单位毫秒", Default: "500"},
 		{Name: "offdc", Description: "官方模式指定数据中心；留空自动选择最低延迟数据中心", Default: ""},
 		{Name: "offspeedlimit", Description: "官方模式测速达标结果上限；0 表示关闭官方测速", Default: "5"},
 		{Name: "offspeedmin", Description: "官方模式测速达标下限，单位 MB/s", Default: "0.1"},
@@ -1282,6 +1287,7 @@ func runOfficialSpeedTests(ctx context.Context, session *appSession, results []T
 
 func printCLIConfig(cfg *cliConfig) {
 	fmt.Printf("%s %s\n", colorize("CFData-WEB 版本:", ansiBold+ansiGreen), appVersion)
+	fmt.Printf("%s %s\n", colorize("调试等级:", ansiBold+ansiGreen), debugFlagValue{}.String())
 	checkAndPrintUpdate("")
 
 	line := func(label, value string) {
