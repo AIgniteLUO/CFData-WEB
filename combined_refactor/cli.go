@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,12 +26,18 @@ type cliConfig struct {
 	scanMode        string
 	ipType          int
 	threads         int
+	offThreads      int
+	nsbThreads      int
 	port            int
 	delay           int
+	offDelay        int
+	nsbDelay        int
 	resultLimit     int
 	dc              string
 	file            string
 	sourceURL       string
+	offURL          string
+	nsbURL          string
 	outFile         string
 	nsbFallbackPort int
 	speedTest       int
@@ -81,17 +88,20 @@ type cliFileConfig struct {
 	ScanMode        string  `json:"scanmode"`
 	IPType          int     `json:"offiptype"`
 	Threads         int     `json:"offthreads"`
+	NSBThreads      int     `json:"nsbthreads"`
 	Out             string  `json:"out"`
 	SpeedTest       int     `json:"nsbspeedtest"`
 	Progress        bool    `json:"progress"`
 	NoColor         bool    `json:"nocolor"`
 	SkipGeo         bool    `json:"skipgeo"`
 	URL             string  `json:"offurl"`
+	NSBURL          string  `json:"nsburl"`
 	DNS             string  `json:"dns"`
 	Debug           any     `json:"debug"`
 	CompactIPv4     bool    `json:"compactipv4"`
 	TestPort        int     `json:"offport"`
 	Delay           int     `json:"offdelay"`
+	NSBDelay        int     `json:"nsbdelay"`
 	DC              string  `json:"offdc"`
 	SpeedLimit      int     `json:"offspeedlimit"`
 	SpeedMin        float64 `json:"offspeedmin"`
@@ -262,12 +272,12 @@ func registerCLIFlags() *cliConfig {
 	flag.StringVar(&cfg.mode, "mode", "official", "CLI 模式：official 或 nsb")
 	flag.StringVar(&cfg.scanMode, "scanmode", "tcping", "扫描方式：tcping（默认，TCP 握手延迟）或 httping（HTTP TTFB，延迟比 tcping 高属正常，不同模式数据不可对比）")
 	flag.IntVar(&cfg.ipType, "offiptype", 4, "官方模式 IP 类型：4 或 6")
-	flag.IntVar(&cfg.threads, "offthreads", 100, "官方扫描并发数")
-	flag.IntVar(&cfg.threads, "nsbthreads", 100, "非标扫描并发数")
+	flag.IntVar(&cfg.offThreads, "offthreads", 100, "官方扫描并发数")
+	flag.IntVar(&cfg.nsbThreads, "nsbthreads", 100, "非标扫描并发数")
 	flag.IntVar(&cfg.speedTest, "nsbspeedtest", 0, "非标测速线程数；表示同时测速的 IP 数量，0 表示不测速。多 IP 并发测速会影响实际下载速度，需要准确速度应设置为 1")
 	flag.IntVar(&cfg.port, "offport", 443, "目标测试端口")
-	flag.IntVar(&cfg.delay, "offdelay", 500, "官方延迟阈值（毫秒）")
-	flag.IntVar(&cfg.delay, "nsbdelay", 500, "非标延迟阈值（毫秒）")
+	flag.IntVar(&cfg.offDelay, "offdelay", 500, "官方延迟阈值（毫秒）")
+	flag.IntVar(&cfg.nsbDelay, "nsbdelay", 500, "非标延迟阈值（毫秒）")
 	flag.StringVar(&cfg.dc, "offdc", "", "官方模式指定数据中心，不填则自动选择最低延迟数据中心")
 	flag.StringVar(&cfg.file, "nsbfile", "", "非标模式输入文件路径")
 	flag.StringVar(&cfg.sourceURL, "nsbsourceurl", "", "非标模式网络输入 URL")
@@ -280,8 +290,8 @@ func registerCLIFlags() *cliConfig {
 	flag.IntVar(&cfg.endRow, "outendrow", 0, "导出/上传结束行；0 表示至末尾")
 	flag.IntVar(&cfg.speedLimit, "offspeedlimit", 5, "官方模式测速达标结果上限；0 表示关闭官方测速")
 	flag.Float64Var(&cfg.speedMin, "offspeedmin", 0.1, "官方模式测速达标下限，单位 MB/s")
-	flag.StringVar(&speedTestURL, "offurl", autoSpeedURLValue, "官方测速下载地址")
-	flag.StringVar(&speedTestURL, "nsburl", autoSpeedURLValue, "非标测速下载地址")
+	flag.StringVar(&cfg.offURL, "offurl", autoSpeedURLValue, "官方测速下载地址")
+	flag.StringVar(&cfg.nsbURL, "nsburl", autoSpeedURLValue, "非标测速下载地址")
 	flag.BoolVar(&cfg.enableTLS, "nsbtls", true, "非标模式是否启用 TLS")
 	flag.BoolVar(&cfg.compactNSB, "nsbcompact", true, "非标模式导出精简表格列")
 	flag.IntVar(&cfg.resultLimit, "nsbresultlimit", 1000, "非标模式延迟测试结果上限；必须为非 0 正整数")
@@ -492,7 +502,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: false, Mode: "official", ScanMode: "tcping", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, OutIPType: "all", OutQualified: "all", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", V6Bracket: true, Separator: "-", OutStartRow: 1, OutEndRow: 0, GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results", EdgeTunnel: false, ETMode: "overwrite"}
+	return cliFileConfig{CLI: false, Mode: "official", ScanMode: "tcping", IPType: 4, Threads: 100, NSBThreads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, NSBURL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, NSBDelay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, OutIPType: "all", OutQualified: "all", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", V6Bracket: true, Separator: "-", OutStartRow: 1, OutEndRow: 0, GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results", EdgeTunnel: false, ETMode: "overwrite"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -585,6 +595,96 @@ func mergeCLIExportConfig(dst *cliExportConfig, src cliExportConfig, onlyProvide
 	}
 }
 
+// cliFileConfigJSONKeys 返回配置结构体全部 json 字段名，作为新模板的 key 基准。
+func cliFileConfigJSONKeys() map[string]bool {
+	keys := make(map[string]bool)
+	t := reflect.TypeOf(cliFileConfig{})
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		name := strings.Split(tag, ",")[0]
+		if name == "" || name == "-" {
+			continue
+		}
+		keys[name] = true
+	}
+	return keys
+}
+
+// migrateConfigFileToLatest 新迁移机制：
+//   - 文件 key 与新模板 key 完全一致且 _config_version 为当前版本 → 不做任何改动
+//   - 无旧名键（仅版本旧或缺新键）→ 静默迁移：备份原文件 → 以新模板为基准把同名值迁入 → 写回新文件
+//   - 文件存在新模板不认识的旧名键 → 交互提示「配置文件存在更新，是否迁移同变量名的配置？」
+//     选 y：同上静默流程（只保留同名键，新增/改名项为默认值，提示用户自行设置）
+//     选 n 或非交互环境（stdin=/dev/null）：不改文件继续运行，下次启动再提示
+func migrateConfigFileToLatest(path string, data []byte) ([]byte, error) {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return data, nil // 非 JSON：交由后续解析流程报错
+	}
+	templateKeys := cliFileConfigJSONKeys()
+	cfgObj := raw
+	nested := false
+	if inner, ok := raw["config"].(map[string]interface{}); ok {
+		cfgObj = inner
+		nested = true
+	}
+	var unknown, missing []string
+	for k := range cfgObj {
+		if !templateKeys[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	for k := range templateKeys {
+		if _, ok := cfgObj[k]; !ok {
+			missing = append(missing, k)
+		}
+	}
+	version := ""
+	if nested {
+		version, _ = raw["_config_version"].(string)
+		version = strings.TrimSpace(version)
+	}
+	if len(unknown) == 0 && len(missing) == 0 && version == appVersion {
+		return data, nil // 与最新模板完全一致
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		if target, err := os.Readlink("/proc/self/fd/0"); err == nil && target == "/dev/null" {
+			fmt.Printf("[migrate] 配置文件存在更新（旧变量名: %s），非交互环境跳过迁移，继续使用当前文件\n", strings.Join(unknown, ", "))
+			return data, nil
+		}
+		fmt.Println("[migrate] 检测到配置文件存在更新（变量名有变化）")
+		fmt.Printf("[migrate] 新模板中不存在的旧变量名: %s\n", strings.Join(unknown, ", "))
+		fmt.Print("[migrate] 是否迁移同变量名的配置？(y=迁移并备份原文件，新增/改名项为默认值请自行设置 / n=跳过，下次启动再提示) > ")
+		line, outcome := readMenuLine()
+		if outcome != promptOK || !strings.EqualFold(strings.TrimSpace(line), "y") {
+			fmt.Println("[migrate] 已跳过迁移，下次启动将再次提示")
+			return data, nil
+		}
+	}
+	backupPath := path + ".bak"
+	if err := os.WriteFile(backupPath, data, 0600); err != nil {
+		fmt.Printf("[migrate] 备份原配置失败，跳过本次迁移: %v\n", err)
+		return data, nil
+	}
+	newCfg := defaultCLIFileConfig()
+	if cfgBytes, err := json.Marshal(cfgObj); err == nil {
+		_ = json.Unmarshal(cfgBytes, &newCfg) // 同名值迁入新模板基准；缺键保持默认；旧名键自然丢弃
+	}
+	if err := writeCLIConfigTemplate(path, newCfg); err != nil {
+		return data, fmt.Errorf("写入迁移后的配置失败 %s: %w", path, err)
+	}
+	fmt.Printf("[migrate] 配置已按新模板迁移: %s（原文件备份: %s）\n", path, backupPath)
+	if len(unknown) > 0 {
+		fmt.Println("[migrate] 新增/改名的配置项已按默认值生成，请通过菜单 3「修改配置参数」自行设置")
+	}
+	migrated, err := os.ReadFile(path)
+	if err != nil {
+		return data, nil
+	}
+	return migrated, nil
+}
+
 func loadOrCreateCLIConfig(path string) (cliFileConfig, bool, error) {
 	path = expandHome(path)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -605,41 +705,24 @@ func loadOrCreateCLIConfig(path string) (cliFileConfig, bool, error) {
 		return cfg, false, nil
 	}
 
-	needsRewrite := false
-	var rawMap map[string]interface{}
-	if err := json.Unmarshal(data, &rawMap); err == nil {
-		inner, hasNested := rawMap["config"]
-		if hasNested {
-			if m, ok := inner.(map[string]interface{}); ok {
-				if migrateConfigKeys(m) {
-					needsRewrite = true
-				}
-			}
-		} else {
-			if migrateConfigKeys(rawMap) {
-				needsRewrite = true
-			}
-		}
-		if needsRewrite {
-			data, _ = json.Marshal(rawMap)
-		}
+	data, err = migrateConfigFileToLatest(path, data)
+	if err != nil {
+		return cliFileConfig{}, false, err
 	}
 
-	template := cliExportConfigTemplate{Config: defaultCLIFileConfig()}
-	needsRewrite = false
-	if err := json.Unmarshal(data, &template); err == nil && (template.Config.Mode != "" || template.Config.Format != "" || template.Description != "") {
+	var probe map[string]interface{}
+	nested := false
+	if err := json.Unmarshal(data, &probe); err == nil {
+		_, nested = probe["config"].(map[string]interface{})
+	}
+	if nested {
+		template := cliExportConfigTemplate{Config: defaultCLIFileConfig()}
+		if err := json.Unmarshal(data, &template); err != nil {
+			return cliFileConfig{}, false, fmt.Errorf("解析配置文件失败 %s: %w", path, err)
+		}
 		cfg = template.Config
-		needsRewrite = cliConfigVersionIsOld(template.ConfigVersion)
 	} else if err := json.Unmarshal(data, &cfg); err != nil {
 		return cliFileConfig{}, false, fmt.Errorf("解析配置文件失败 %s: %w", path, err)
-	} else {
-		needsRewrite = true
-	}
-	cfg = migrateCLIFileConfig(cfg, template.ConfigVersion)
-	if needsRewrite {
-		if err := writeCLIConfigTemplate(path, cfg); err != nil {
-			return cliFileConfig{}, false, err
-		}
 	}
 	return cfg, false, nil
 }
@@ -671,97 +754,6 @@ func writeCLIConfigTemplate(path string, cfg cliFileConfig) error {
 	return os.WriteFile(path, []byte(buf.String()), 0600)
 }
 
-func migrateCLIFileConfig(cfg cliFileConfig, version any) cliFileConfig {
-	if cliConfigVersionIsOld(version) {
-		if v, ok := cfg.Debug.(bool); ok && v {
-			cfg.Debug = "error"
-		}
-	}
-	return cfg
-}
-
-func migrateConfigKeys(m map[string]interface{}) bool {
-	migrations := map[string]string{
-		"iptype":      "offiptype",
-		"testport":    "offport",
-		"speedlimit":  "offspeedlimit",
-		"speedmin":    "offspeedmin",
-		"dc":          "offdc",
-		"file":        "nsbfile",
-		"sourceurl":   "nsbsourceurl",
-		"speedtest":   "nsbspeedtest",
-		"tls":         "nsbtls",
-		"compact":     "nsbcompact",
-		"resultlimit": "nsbresultlimit",
-		"format":      "outformat",
-		"fields":      "outfields",
-		"custom":      "outcustom",
-		"v6bracket":   "outv6bracket",
-		"nsbiptype":   "outiptype",
-	}
-	sharedKeys := []string{"threads", "delay", "url"}
-	changed := false
-	for oldKey, newKey := range migrations {
-		if v, ok := m[oldKey]; ok {
-			if _, exists := m[newKey]; !exists {
-				m[newKey] = v
-				changed = true
-			}
-		}
-	}
-	for _, key := range sharedKeys {
-		if v, ok := m[key]; ok {
-			offKey := "off" + key
-			nsbKey := "nsb" + key
-			if _, exists := m[offKey]; !exists {
-				m[offKey] = v
-				changed = true
-			}
-			if _, exists := m[nsbKey]; !exists {
-				m[nsbKey] = v
-				changed = true
-			}
-		}
-	}
-	if v, ok := m["offout"]; ok {
-		m["out"] = v
-		changed = true
-	} else if v, ok := m["nsbout"]; ok {
-		m["out"] = v
-		changed = true
-	}
-	if _, exists := m["outqualified"]; !exists {
-		if v, ok := m["nsbqualified"]; ok {
-			switch t := v.(type) {
-			case bool:
-				if t {
-					m["outqualified"] = "qualified"
-					changed = true
-				}
-			case string:
-				if strings.TrimSpace(t) != "" {
-					m["outqualified"] = t
-					changed = true
-				}
-			}
-		}
-	}
-	return changed
-}
-
-func cliConfigVersionIsOld(version any) bool {
-	switch v := version.(type) {
-	case string:
-		return strings.TrimSpace(v) == "" || strings.TrimSpace(v) != appVersion
-	case float64:
-		return v < 2
-	case int:
-		return v < 2
-	default:
-		return true
-	}
-}
-
 func buildCLIConfigHelp() []cliConfigHelp {
 	return []cliConfigHelp{
 		{Name: "cli", Description: "CLI 模式开关；已废弃本字段，CLI 仅由命令行 -cli 控制（保留仅为兼容旧配置）", Default: "false", Options: []string{"true", "false"}},
@@ -769,17 +761,20 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "scanmode", Description: "扫描方式；tcping：仅测量 TCP 握手延迟（默认），httping：测量 HTTP TTFB 全链路延迟，延迟比 tcping 高属正常，不同模式数据不可互相比较", Default: "tcping", Options: []string{"tcping", "httping"}},
 		{Name: "offiptype", Description: "官方模式 IP 类型", Default: "4", Options: []string{"4", "6"}},
 		{Name: "offthreads", Description: "官方扫描并发数", Default: "100"},
+		{Name: "nsbthreads", Description: "非标扫描并发数", Default: "100"},
 		{Name: "out", Description: "输出文件名", Default: "ip.csv"},
 		{Name: "nsbspeedtest", Description: "非标测速线程数；0 表示不测速。多 IP 并发影响实际速度，需要准确应设为 1", Default: "0"},
 		{Name: "progress", Description: "输出进度日志", Default: "true", Options: []string{"true", "false"}},
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
 		{Name: "skipgeo", Description: "跳过地区/代理环境验证（等同命令行 -skipgeo）", Default: "false", Options: []string{"true", "false"}},
 		{Name: "offurl", Description: "官方测速下载地址；auto 表示由后端自动选择内置测速源", Default: autoSpeedURLValue},
+		{Name: "nsburl", Description: "非标测速下载地址；auto 表示由后端自动选择内置测速源", Default: autoSpeedURLValue},
 		{Name: "dns", Description: "自定义 DNS 服务器；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: defaultDNSServers},
 		{Name: "debug", Description: "调试输出等级；error 记录程序错误和下载/更新/API 异常，all 额外包含测速失败等全部明细", Default: "false", Options: []string{"false", "error", "all", "true"}},
 		{Name: "compactipv4", Description: "精简本地 IPv4 地址库并覆盖 ips-v4.txt", Default: "false", Options: []string{"true", "false"}},
 		{Name: "offport", Description: "官方模式测试端口", Default: "443"},
 		{Name: "offdelay", Description: "官方延迟阈值，单位毫秒", Default: "500"},
+		{Name: "nsbdelay", Description: "非标延迟阈值，单位毫秒", Default: "500"},
 		{Name: "offdc", Description: "官方模式指定数据中心；留空自动选择最低延迟数据中心", Default: ""},
 		{Name: "offspeedlimit", Description: "官方模式测速达标结果上限；0 表示关闭官方测速", Default: "5"},
 		{Name: "offspeedmin", Description: "官方模式测速达标下限，单位 MB/s", Default: "0.1"},
@@ -804,7 +799,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "github", Description: "导出后上传到 GitHub", Default: "false", Options: []string{"true", "false"}},
 		{Name: "ghrepo", Description: "GitHub 仓库，格式 owner/repo", Default: ""},
 		{Name: "ghbranch", Description: "GitHub 分支", Default: "main"},
-		{Name: "ghpath", Description: "GitHub 目标路径；留空时按 format 自动使用 results/ip.csv 或 results/ip.txt；文件不存在会新建，存在会覆盖", Default: "自动按 format 生成"},
+		{Name: "ghpath", Description: "GitHub 目标路径；留空时按 outformat 自动使用 results/ip.csv 或 results/ip.txt；文件不存在会新建，存在会覆盖", Default: "自动按 outformat 生成"},
 		{Name: "ghmessage", Description: "GitHub 提交信息", Default: "update cfdata results"},
 		{Name: "ghtoken", Description: "GitHub token；不推荐直接写入配置。强烈建议使用仅限制指定仓库读写权限的 token，并确保仓库内无重要数据，避免 token 泄露造成不必要的意外", Default: ""},
 		{Name: "ghtokenfile", Description: "GitHub token 文件路径。强烈建议文件内 token 仅限制指定仓库读写权限，并确保仓库内无重要数据", Default: ""},
@@ -837,11 +832,15 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	}
 	setString("mode", &cfg.mode, fileCfg.Mode)
 	setString("scanmode", &cfg.scanMode, fileCfg.ScanMode)
+	isNSBRun := strings.EqualFold(strings.TrimSpace(cfg.mode), "nsb")
 	if !provided["offiptype"] {
 		cfg.ipType = fileCfg.IPType
 	}
-	if !provided["offthreads"] && !provided["nsbthreads"] {
-		cfg.threads = fileCfg.Threads
+	if !provided["offthreads"] {
+		cfg.offThreads = fileCfg.Threads
+	}
+	if !provided["nsbthreads"] {
+		cfg.nsbThreads = fileCfg.NSBThreads
 	}
 	if !provided["out"] {
 		cfg.outFile = fileCfg.Out
@@ -856,8 +855,11 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	if !provided["skipgeo"] {
 		skipGeoCheck = fileCfg.SkipGeo
 	}
-	if !provided["offurl"] && !provided["nsburl"] && strings.TrimSpace(fileCfg.URL) != "" {
-		speedTestURL = fileCfg.URL
+	if !provided["offurl"] && strings.TrimSpace(fileCfg.URL) != "" {
+		cfg.offURL = fileCfg.URL
+	}
+	if !provided["nsburl"] && strings.TrimSpace(fileCfg.NSBURL) != "" {
+		cfg.nsbURL = fileCfg.NSBURL
 	}
 	if !provided["dns"] && strings.TrimSpace(fileCfg.DNS) != "" {
 		customDNSServer = fileCfg.DNS
@@ -871,8 +873,11 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	if !provided["offport"] {
 		cfg.port = fileCfg.TestPort
 	}
-	if !provided["offdelay"] && !provided["nsbdelay"] {
-		cfg.delay = fileCfg.Delay
+	if !provided["offdelay"] {
+		cfg.offDelay = fileCfg.Delay
+	}
+	if !provided["nsbdelay"] {
+		cfg.nsbDelay = fileCfg.NSBDelay
 	}
 	if !provided["offdc"] {
 		cfg.dc = fileCfg.DC
@@ -898,6 +903,25 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	setInt("nsbresultlimit", &cfg.resultLimit, fileCfg.ResultLimit)
 	setFloat("nsbspeedmin", &cfg.nsbSpeedMin, fileCfg.NSBSpeedMin)
 	setInt("nsbspeedlimit", &cfg.nsbSpeedLimit, fileCfg.NSBSpeedLimit)
+
+	genericURL := speedTestURL
+	if isNSBRun {
+		cfg.threads = cfg.nsbThreads
+		cfg.delay = cfg.nsbDelay
+		if isAutoSpeedURL(cfg.nsbURL) && provided["url"] && strings.TrimSpace(genericURL) != "" {
+			speedTestURL = genericURL
+		} else {
+			speedTestURL = cfg.nsbURL
+		}
+	} else {
+		cfg.threads = cfg.offThreads
+		cfg.delay = cfg.offDelay
+		if isAutoSpeedURL(cfg.offURL) && provided["url"] && strings.TrimSpace(genericURL) != "" {
+			speedTestURL = genericURL
+		} else {
+			speedTestURL = cfg.offURL
+		}
+	}
 }
 
 func defaultCLIConfigPath() string {

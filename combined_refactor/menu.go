@@ -406,7 +406,7 @@ func runSettingsWizard(fileCfg *cliFileConfig) int {
 	if isNSB {
 		useURL := strings.TrimSpace(fileCfg.SourceURL) != "" && strings.TrimSpace(fileCfg.File) == ""
 		idx, o = askChoice("输入方式", "非标优选的扫描目标来源，二选一",
-			[]string{"输入文件（本机文件路径）", "网络URL（http/https 文本地址）"}, boolChoiceIndex(useURL))
+			[]string{"输入文件（本机文件路径）", "网络URL（http/https 文本地址）"}, boolChoiceIndex(!useURL))
 		if o != promptOK {
 			return o
 		}
@@ -455,6 +455,12 @@ func runSettingsWizard(fileCfg *cliFileConfig) int {
 			return o
 		}
 		fileCfg.NSBFallbackPort = n
+
+		n, o = askInt("并发数量", strconv.Itoa(fileCfg.NSBThreads), "同时扫描的 IP 数量，越大越快但占用带宽越多", fileCfg.NSBThreads, 1, 0)
+		if o != promptOK {
+			return o
+		}
+		fileCfg.NSBThreads = n
 	} else {
 		n, o := askInt("并发数量", strconv.Itoa(fileCfg.Threads), "同时扫描的 IP 数量，越大越快但占用带宽越多", fileCfg.Threads, 1, 0)
 		if o != promptOK {
@@ -463,11 +469,19 @@ func runSettingsWizard(fileCfg *cliFileConfig) int {
 		fileCfg.Threads = n
 	}
 
-	n, o := askInt("扫描合格延迟", fmt.Sprintf("%dms", fileCfg.Delay), "TCPing/HTTPing 延迟超过该值视为不合格（毫秒）", fileCfg.Delay, 1, 0)
+	delayCurrent := fileCfg.Delay
+	if isNSB {
+		delayCurrent = fileCfg.NSBDelay
+	}
+	n, o := askInt("扫描合格延迟", fmt.Sprintf("%dms", delayCurrent), "TCPing/HTTPing 延迟超过该值视为不合格（毫秒）", delayCurrent, 1, 0)
 	if o != promptOK {
 		return o
 	}
-	fileCfg.Delay = n
+	if isNSB {
+		fileCfg.NSBDelay = n
+	} else {
+		fileCfg.Delay = n
+	}
 
 	if isNSB {
 		n, o = askInt("扫描合格数量", strconv.Itoa(fileCfg.ResultLimit), "延迟测试结果达到该数量后停止扫描", fileCfg.ResultLimit, 1, 0)
@@ -538,18 +552,27 @@ func runSettingsWizard(fileCfg *cliFileConfig) int {
 		fileCfg.TLS = idx == 0
 	}
 
+	speedURL := fileCfg.URL
+	if isNSB {
+		speedURL = fileCfg.NSBURL
+	}
 	urlCurrent := "自动选择"
-	if !isAutoSpeedURL(fileCfg.URL) && strings.TrimSpace(fileCfg.URL) != "" {
-		urlCurrent = fileCfg.URL
+	if !isAutoSpeedURL(speedURL) && strings.TrimSpace(speedURL) != "" {
+		urlCurrent = speedURL
 	}
 	v, o = askLine("测速网址", urlCurrent, "输入 0 或直接回车=自动选择内置测速源；或输入完整 http(s) 下载地址")
 	if o != promptOK {
 		return o
 	}
 	if v == "0" {
-		fileCfg.URL = autoSpeedURLValue
+		speedURL = autoSpeedURLValue
 	} else if v != "" {
-		fileCfg.URL = v
+		speedURL = v
+	}
+	if isNSB {
+		fileCfg.NSBURL = speedURL
+	} else {
+		fileCfg.URL = speedURL
 	}
 
 	if isNSB {
