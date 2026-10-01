@@ -66,6 +66,10 @@ func confirmCLIProxyCountry(country string, ok bool) bool {
 	if ok && !shouldWarnProxyCountry(country) {
 		return true
 	}
+	if target, err := os.Readlink("/proc/self/fd/0"); err == nil && target == "/dev/null" {
+		fmt.Println("[proxy-check] 非交互环境无法确认代理警告，已中止本次任务（如为定时任务请查看日志）")
+		return false
+	}
 	displayCountry := strings.TrimSpace(country)
 	if displayCountry == "" {
 		displayCountry = "未知"

@@ -85,6 +85,7 @@ type cliFileConfig struct {
 	SpeedTest       int     `json:"nsbspeedtest"`
 	Progress        bool    `json:"progress"`
 	NoColor         bool    `json:"nocolor"`
+	SkipGeo         bool    `json:"skipgeo"`
 	URL             string  `json:"offurl"`
 	DNS             string  `json:"dns"`
 	Debug           any     `json:"debug"`
@@ -186,7 +187,7 @@ var (
 	ansiMagenta     = "\033[35m"
 
 	cliCommonFlags = []cliFlagInfo{
-		{name: "cli", description: "是否启用命令行模式，不带时默认启动 Web（请用 -cli 或 -cli=true，不要写成 -cli true）", defaultValue: "false"},
+		{name: "cli", description: "启用命令行模式：不带时启动 Web；-cli 进入交互菜单；-cli qs 按配置快速启动（请用 -cli 或 -cli=true）", defaultValue: "false"},
 		{name: "port", description: "Web 服务监听端口", defaultValue: "13335"},
 		{name: "user", description: "Web 认证用户名（不设置则不启用认证）", defaultValue: ""},
 		{name: "password", description: "Web 认证密码（需同时设置 -user）", defaultValue: ""},
@@ -319,7 +320,7 @@ func runCLI(cfg *cliConfig) error {
 			return fmt.Errorf("已取消：当前网络环境标签为 %s", firstNonEmpty(country, "未知"))
 		}
 	} else {
-		fmt.Println("[proxy-check] 已通过 -skipgeo 跳过地区/代理环境验证")
+		fmt.Println("[proxy-check] 已跳过地区/代理环境验证")
 	}
 
 	if cfg.compactIPv4 {
@@ -410,6 +411,10 @@ func resolveCLIExportConfig(cfg *cliConfig) error {
 		fmt.Println("[config] 请退出后按需编辑配置文件，再重新开始测试。")
 		return errCLIConfigCreated
 	}
+	return applyCLIExportResolution(cfg, fileCfg, configPath, provided)
+}
+
+func applyCLIExportResolution(cfg *cliConfig, fileCfg cliFileConfig, configPath string, provided map[string]bool) error {
 	merged := defaultCLIExportConfig()
 	applyCLIFileConfig(cfg, fileCfg, provided)
 	if !provided["nsbfallbackport"] && fileCfg.NSBFallbackPort <= 0 {
@@ -479,7 +484,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: true, Mode: "official", ScanMode: "tcping", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, OutIPType: "all", OutQualified: "all", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", V6Bracket: true, Separator: "-", OutStartRow: 1, OutEndRow: 0, GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results", EdgeTunnel: false, ETMode: "overwrite"}
+	return cliFileConfig{CLI: false, Mode: "official", ScanMode: "tcping", IPType: 4, Threads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, OutIPType: "all", OutQualified: "all", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", V6Bracket: true, Separator: "-", OutStartRow: 1, OutEndRow: 0, GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results", EdgeTunnel: false, ETMode: "overwrite"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -751,7 +756,7 @@ func cliConfigVersionIsOld(version any) bool {
 
 func buildCLIConfigHelp() []cliConfigHelp {
 	return []cliConfigHelp{
-		{Name: "cli", Description: "启用 CLI 模式", Default: "true", Options: []string{"true", "false"}},
+		{Name: "cli", Description: "CLI 模式开关；已废弃本字段，CLI 仅由命令行 -cli 控制（保留仅为兼容旧配置）", Default: "false", Options: []string{"true", "false"}},
 		{Name: "mode", Description: "运行模式", Default: "official", Options: []string{"official", "nsb"}},
 		{Name: "scanmode", Description: "扫描方式；tcping：仅测量 TCP 握手延迟（默认），httping：测量 HTTP TTFB 全链路延迟，延迟比 tcping 高属正常，不同模式数据不可互相比较", Default: "tcping", Options: []string{"tcping", "httping"}},
 		{Name: "offiptype", Description: "官方模式 IP 类型", Default: "4", Options: []string{"4", "6"}},
@@ -761,6 +766,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "nsbspeedtest", Description: "非标测速线程数；0 表示不测速。多 IP 并发影响实际速度，需要准确应设为 1", Default: "0"},
 		{Name: "progress", Description: "输出进度日志", Default: "true", Options: []string{"true", "false"}},
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
+		{Name: "skipgeo", Description: "跳过地区/代理环境验证（等同命令行 -skipgeo）", Default: "false", Options: []string{"true", "false"}},
 		{Name: "offurl", Description: "官方测速下载地址；auto 表示由后端自动选择内置测速源", Default: autoSpeedURLValue},
 		{Name: "nsburl", Description: "非标测速下载地址", Default: autoSpeedURLValue},
 		{Name: "dns", Description: "自定义 DNS 服务器；默认系统 DNS 优先，失败回退内置 DNS；显式设置时强制使用指定 DNS。用于 IP 库、locations、ASN、GitHub、网络 URL 输入等需要 DNS 的外部请求", Default: defaultDNSServers},
@@ -821,8 +827,8 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 			*target = value
 		}
 	}
-	if !provided["cli"] && fileCfg.CLI {
-		cfg.enabled = fileCfg.CLI
+	if !provided["debug"] {
+		applyConfigDebug(fileCfg.Debug)
 	}
 	setString("mode", &cfg.mode, fileCfg.Mode)
 	setString("scanmode", &cfg.scanMode, fileCfg.ScanMode)
@@ -842,6 +848,9 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	if !provided["nocolor"] {
 		cfg.noColor = fileCfg.NoColor
 	}
+	if !provided["skipgeo"] {
+		skipGeoCheck = fileCfg.SkipGeo
+	}
 	if !provided["offurl"] && !provided["nsburl"] && strings.TrimSpace(fileCfg.URL) != "" {
 		speedTestURL = fileCfg.URL
 	}
@@ -850,9 +859,6 @@ func applyCLIFileConfig(cfg *cliConfig, fileCfg cliFileConfig, provided map[stri
 	}
 	if provided["dns"] {
 		customDNSForced = true
-	}
-	if !provided["debug"] {
-		applyConfigDebug(fileCfg.Debug)
 	}
 	if !provided["compactipv4"] {
 		cfg.compactIPv4 = fileCfg.CompactIPv4
@@ -1300,6 +1306,22 @@ func printCLIConfig(cfg *cliConfig) {
 	dnsLabel := "系统默认"
 	if customDNSForced {
 		dnsLabel = customDNSServer
+	} else if strings.TrimSpace(customDNSServer) != "" && customDNSServer != defaultDNSServers {
+		dnsLabel = "系统默认（回退 " + customDNSServer + "）"
+	}
+	ipVersionLabel := "IPv4"
+	if cfg.ipType == 6 {
+		ipVersionLabel = "IPv6"
+	}
+	outputRows := func() {
+		line("开始行", strconv.Itoa(cfg.startRow))
+		if cfg.endRow > 0 {
+			line("结束行", strconv.Itoa(cfg.endRow))
+			line("输出总量", fmt.Sprintf("%d行", cfg.endRow-cfg.startRow+1))
+		} else {
+			line("结束行", "不限")
+			line("输出总量", "不限")
+		}
 	}
 
 	fmt.Println(colorize("----------------------------------------", ansiCyan))
@@ -1309,6 +1331,8 @@ func printCLIConfig(cfg *cliConfig) {
 		line("扫描方式", scanLabel)
 		line("输出文件名", cfg.outFile)
 		line("文件格式", cfg.export.Format)
+		line("CSV 精简", boolLabel(cfg.compactNSB))
+		outputRows()
 		if strings.TrimSpace(cfg.file) != "" {
 			line("输入文件", cfg.file)
 		} else {
@@ -1337,8 +1361,10 @@ func printCLIConfig(cfg *cliConfig) {
 	} else {
 		line("模式", "官方优选")
 		line("扫描方式", scanLabel)
+		line("IP类型", ipVersionLabel)
 		line("输出文件名", cfg.outFile)
 		line("文件格式", cfg.export.Format)
+		outputRows()
 		line("并发数量", strconv.Itoa(cfg.threads))
 		line("扫描合格延迟", fmt.Sprintf("%dms", cfg.delay))
 		line("DNS", dnsLabel)
@@ -1352,16 +1378,6 @@ func printCLIConfig(cfg *cliConfig) {
 		line("自动测速", boolLabel(cfg.speedLimit > 0))
 		line("测速结果数量", strconv.Itoa(cfg.speedLimit))
 		line("测试合格速度", fmt.Sprintf("%.2fMB/s", cfg.speedMin))
-	}
-	fmt.Println()
-	fmt.Println(colorize("输出配置", ansiBold+ansiCyan))
-	line("输出开始行", strconv.Itoa(cfg.startRow))
-	if cfg.endRow > 0 {
-		line("输出结束行", strconv.Itoa(cfg.endRow))
-		line("输出总量", fmt.Sprintf("%d行", cfg.endRow-cfg.startRow+1))
-	} else {
-		line("输出结束行", "不限")
-		line("输出总量", "不限")
 	}
 	fmt.Println(colorize("----------------------------------------", ansiCyan))
 }
@@ -1377,13 +1393,13 @@ func maskSecret(value string) string {
 }
 
 func printCLIUsage() {
+	printBanner()
 	fmt.Fprintf(flag.CommandLine.Output(), "%s\n", colorize("CFData 命令行帮助", ansiBold+ansiGreen))
 	fmt.Fprintf(flag.CommandLine.Output(), "版本: %s\n", appVersion)
 	checkAndPrintUpdate("")
 	fmt.Fprintf(flag.CommandLine.Output(), "\n")
-	fmt.Fprintf(flag.CommandLine.Output(), "默认行为: 不带 -cli 时启动 Web 服务；带 -cli 或 -cli=true 时进入 CLI 模式\n")
-	fmt.Fprintf(flag.CommandLine.Output(), "注意: Go 的布尔参数必须写成 -cli 或 -cli=true，不能写成 -cli true（会导致后续参数被忽略）\n")
-	fmt.Fprintf(flag.CommandLine.Output(), "CLI 用法: ./combined_refactor_debug -cli -mode=official ...\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "默认行为: 不带 -cli 时启动 Web 服务；-cli 进入交互菜单；-cli qs 按配置快速启动\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "CLI 用法: ./cfdata-test -cli（菜单）或 -cli qs（快速启动）或 -cli -mode=official ...（直接执行）\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "\n")
 	printCLIUsageGroup("通用参数", cliCommonFlags)
 	printCLIUsageGroup("官方模式参数", cliOfficialFlags)
