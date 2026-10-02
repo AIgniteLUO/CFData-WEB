@@ -694,7 +694,7 @@ func loadOrCreateCLIConfig(path string) (cliFileConfig, bool, error) {
 		if err := writeCLIConfigTemplate(path, defaultCLIFileConfig()); err != nil {
 			return cliFileConfig{}, false, err
 		}
-		return cliFileConfig{}, true, nil
+		return defaultCLIFileConfig(), true, nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

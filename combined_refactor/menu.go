@@ -210,6 +210,7 @@ func runCLIMenu(cfg *cliConfig) {
 	for {
 		status, _ := scheduleStatus()
 		fmt.Println(colorize("========== CFDATA-WEB ==========", ansiBold+ansiCyan))
+		fmt.Printf("  版本: %s\n", colorize(appVersion, ansiBold+ansiGreen))
 		fmt.Println("  1. 启动（按照设置的参数）")
 		fmt.Println("  2. 启动（自定义参数）")
 		fmt.Println("  3. 修改配置参数")
