@@ -138,13 +138,13 @@ CLI 可通过 `-offurl`/`-nsburl` 指定：
 -nsbthreads       非标扫描并发数
 -offport          官方测试/测速端口
 -offdelay         官方延迟阈值，单位毫秒
--nsbdelay         非标延迟阈值，单位毫秒
+-nsbdelay         非标延迟阈值，单位毫秒；0=不筛延迟
 -offurl           官方测速下载地址，默认 auto
 -nsburl           非标测速下载地址，默认 auto
 -dns              自定义 DNS 服务器
 -debug            调试日志等级：false、error、all
 -skipgeo          跳过地区/代理环境验证（启动时不再提示代理警告）
--out              输出文件名（官方/非标通用）
+-out              输出文件名（官方/非标通用），默认 cfdata-results
 ```
 
 非标常用参数：

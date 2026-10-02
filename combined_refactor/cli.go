@@ -205,7 +205,7 @@ var (
 		{name: "host", description: "服务监听地址；留空监听全部地址，Android APK 建议使用 127.0.0.1", defaultValue: ""},
 		{name: "mode", description: "运行模式：official 或 nsb", defaultValue: "official"},
 		{name: "scanmode", description: "扫描方式：tcping（默认，TCP 握手延迟）或 httping（HTTP TTFB，延迟比 tcping 高属正常，不同模式数据不可对比）", defaultValue: "tcping"},
-		{name: "out", description: "输出文件名", defaultValue: "ip.csv"},
+		{name: "out", description: "输出文件名", defaultValue: "cfdata-results"},
 		{name: "progress", description: "是否输出进度日志", defaultValue: "true"},
 		{name: "nocolor", description: "禁用颜色输出（cmd 等不支持 ANSI 的终端可开启避免乱码）", defaultValue: "false"},
 		{name: "skipgeo", description: "跳过地区/代理环境验证，CLI 启动测试前不再确认代理警告", defaultValue: "false"},
@@ -222,7 +222,7 @@ var (
 		{name: "outqualified", description: "导出/上传合格结果筛选：all 全部 / qualified 仅合格 / unqualified 仅不合格", defaultValue: "all"},
 		{name: "outiptype", description: "导出/上传 IP 类型筛选：all、ipv4 或 ipv6", defaultValue: "all"},
 		{name: "outstartrow", description: "导出/上传开始行（筛选后第 1 行起计），只影响导出和上传内容", defaultValue: "1"},
-		{name: "outendrow", description: "导出/上传结束行；0 表示至末尾，只影响导出和上传内容", defaultValue: "0"},
+		{name: "outendrow", description: "导出/上传结束行；0 表示至末尾，只影响导出和上传内容", defaultValue: "20"},
 		{name: "github", description: "CLI 导出后上传到 GitHub", defaultValue: "false"},
 		{name: "ghrepo", description: "GitHub 仓库，格式 owner/repo", defaultValue: ""},
 		{name: "ghbranch", description: "GitHub 分支", defaultValue: "main"},
@@ -250,7 +250,7 @@ var (
 		{name: "nsbfile", description: "非标模式输入文件路径", defaultValue: ""},
 		{name: "nsbsourceurl", description: "非标模式网络输入 URL", defaultValue: ""},
 		{name: "nsbthreads", description: "非标模式扫描并发数", defaultValue: "100"},
-		{name: "nsbdelay", description: "非标模式延迟阈值（毫秒）", defaultValue: "500"},
+		{name: "nsbdelay", description: "非标模式延迟阈值（毫秒）；0 表示不筛延迟", defaultValue: "0"},
 		{name: "nsbfallbackport", description: "非标输入缺省端口；不填时随 TLS 自动使用 443/80", defaultValue: "0"},
 		{name: "nsbdc", description: "非标模式指定结果数据中心；留空不限制", defaultValue: ""},
 		{name: "nsbspeedtest", description: "非标测速线程数；0 表示不测速。多 IP 并发影响实际速度，需要准确应设为 1", defaultValue: "0"},
@@ -277,7 +277,7 @@ func registerCLIFlags() *cliConfig {
 	flag.IntVar(&cfg.speedTest, "nsbspeedtest", 0, "非标测速线程数；表示同时测速的 IP 数量，0 表示不测速。多 IP 并发测速会影响实际下载速度，需要准确速度应设置为 1")
 	flag.IntVar(&cfg.port, "offport", 443, "目标测试端口")
 	flag.IntVar(&cfg.offDelay, "offdelay", 500, "官方延迟阈值（毫秒）")
-	flag.IntVar(&cfg.nsbDelay, "nsbdelay", 500, "非标延迟阈值（毫秒）")
+	flag.IntVar(&cfg.nsbDelay, "nsbdelay", 0, "非标延迟阈值（毫秒）；0 表示不筛延迟")
 	flag.StringVar(&cfg.dc, "offdc", "", "官方模式指定数据中心，不填则自动选择最低延迟数据中心")
 	flag.StringVar(&cfg.file, "nsbfile", "", "非标模式输入文件路径")
 	flag.StringVar(&cfg.sourceURL, "nsbsourceurl", "", "非标模式网络输入 URL")
@@ -285,9 +285,9 @@ func registerCLIFlags() *cliConfig {
 	flag.StringVar(&cfg.outIPType, "outiptype", "all", "导出/上传 IP 类型筛选：all、ipv4 或 ipv6")
 	flag.StringVar(&cfg.outQualified, "outqualified", "all", "导出/上传合格结果筛选：all、qualified 或 unqualified")
 	flag.StringVar(&cfg.nsbDC, "nsbdc", "", "非标模式指定结果数据中心")
-	flag.StringVar(&cfg.outFile, "out", "ip.csv", "输出文件名")
+	flag.StringVar(&cfg.outFile, "out", "cfdata-results", "输出文件名")
 	flag.IntVar(&cfg.startRow, "outstartrow", 1, "导出/上传开始行（筛选后第 1 行起计）")
-	flag.IntVar(&cfg.endRow, "outendrow", 0, "导出/上传结束行；0 表示至末尾")
+	flag.IntVar(&cfg.endRow, "outendrow", 20, "导出/上传结束行；0 表示至末尾")
 	flag.IntVar(&cfg.speedLimit, "offspeedlimit", 5, "官方模式测速达标结果上限；0 表示关闭官方测速")
 	flag.Float64Var(&cfg.speedMin, "offspeedmin", 0.1, "官方模式测速达标下限，单位 MB/s")
 	flag.StringVar(&cfg.offURL, "offurl", autoSpeedURLValue, "官方测速下载地址")
@@ -502,7 +502,7 @@ func defaultCLIExportConfig() cliExportConfig {
 }
 
 func defaultCLIFileConfig() cliFileConfig {
-	return cliFileConfig{CLI: false, Mode: "official", ScanMode: "tcping", IPType: 4, Threads: 100, NSBThreads: 100, Out: "ip.csv", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, NSBURL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, NSBDelay: 500, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, OutIPType: "all", OutQualified: "all", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", V6Bracket: true, Separator: "-", OutStartRow: 1, OutEndRow: 0, GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results", EdgeTunnel: false, ETMode: "overwrite"}
+	return cliFileConfig{CLI: false, Mode: "official", ScanMode: "tcping", IPType: 4, Threads: 100, NSBThreads: 100, Out: "cfdata-results", SpeedTest: 0, Progress: true, NoColor: false, URL: autoSpeedURLValue, NSBURL: autoSpeedURLValue, DNS: defaultDNSServers, Debug: false, CompactIPv4: false, TestPort: 443, Delay: 500, NSBDelay: 0, DC: "", SpeedLimit: 5, SpeedMin: 0.1, File: "", SourceURL: "", NSBFallbackPort: 0, OutIPType: "all", OutQualified: "all", NSBDC: "", TLS: true, Compact: true, ResultLimit: 1000, NSBSpeedMin: 0.1, NSBSpeedLimit: 5, Format: "txt", Fields: "compact", Custom: "", V6Bracket: true, Separator: "-", OutStartRow: 1, OutEndRow: 20, GitHub: false, GHBranch: "main", GHPath: "", GHMessage: "update cfdata results", EdgeTunnel: false, ETMode: "overwrite"}
 }
 
 func (c cliFileConfig) Export() cliExportConfig {
@@ -762,7 +762,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "offiptype", Description: "官方模式 IP 类型", Default: "4", Options: []string{"4", "6"}},
 		{Name: "offthreads", Description: "官方扫描并发数", Default: "100"},
 		{Name: "nsbthreads", Description: "非标扫描并发数", Default: "100"},
-		{Name: "out", Description: "输出文件名", Default: "ip.csv"},
+		{Name: "out", Description: "输出文件名", Default: "cfdata-results"},
 		{Name: "nsbspeedtest", Description: "非标测速线程数；0 表示不测速。多 IP 并发影响实际速度，需要准确应设为 1", Default: "0"},
 		{Name: "progress", Description: "输出进度日志", Default: "true", Options: []string{"true", "false"}},
 		{Name: "nocolor", Description: "禁用 ANSI 颜色输出", Default: "false", Options: []string{"true", "false"}},
@@ -774,7 +774,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "compactipv4", Description: "精简本地 IPv4 地址库并覆盖 ips-v4.txt", Default: "false", Options: []string{"true", "false"}},
 		{Name: "offport", Description: "官方模式测试端口", Default: "443"},
 		{Name: "offdelay", Description: "官方延迟阈值，单位毫秒", Default: "500"},
-		{Name: "nsbdelay", Description: "非标延迟阈值，单位毫秒", Default: "500"},
+		{Name: "nsbdelay", Description: "非标延迟阈值，单位毫秒；0=不筛延迟", Default: "0"},
 		{Name: "offdc", Description: "官方模式指定数据中心；留空自动选择最低延迟数据中心", Default: ""},
 		{Name: "offspeedlimit", Description: "官方模式测速达标结果上限；0 表示关闭官方测速", Default: "5"},
 		{Name: "offspeedmin", Description: "官方模式测速达标下限，单位 MB/s", Default: "0.1"},
@@ -795,7 +795,7 @@ func buildCLIConfigHelp() []cliConfigHelp {
 		{Name: "outqualified", Description: "导出/上传合格结果筛选；只影响导出和上传内容", Default: "all", Options: []string{"all", "qualified", "unqualified"}},
 		{Name: "outiptype", Description: "导出/上传 IP 类型筛选；只影响导出和上传内容", Default: "all", Options: []string{"all", "ipv4", "ipv6"}},
 		{Name: "outstartrow", Description: "导出/上传开始行（筛选后第 1 行起计）；只影响导出和上传内容", Default: "1"},
-		{Name: "outendrow", Description: "导出/上传结束行；0 表示至末尾；只影响导出和上传内容", Default: "0"},
+		{Name: "outendrow", Description: "导出/上传结束行；0 表示至末尾；只影响导出和上传内容", Default: "20"},
 		{Name: "github", Description: "导出后上传到 GitHub", Default: "false", Options: []string{"true", "false"}},
 		{Name: "ghrepo", Description: "GitHub 仓库，格式 owner/repo", Default: ""},
 		{Name: "ghbranch", Description: "GitHub 分支", Default: "main"},
@@ -1223,7 +1223,7 @@ func runNSBCLI(cfg *cliConfig) error {
 		cfg.delay = 0
 	}
 	if strings.TrimSpace(cfg.outFile) == "" {
-		cfg.outFile = "ip.csv"
+		cfg.outFile = "cfdata-results"
 	}
 	inputName := cfg.file
 	content := ""

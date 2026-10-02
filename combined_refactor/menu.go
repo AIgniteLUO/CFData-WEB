@@ -44,6 +44,7 @@ func displayOrEmpty(value string) string {
 }
 
 func askLine(label, currentDisplay, hint string) (string, int) {
+	fmt.Println()
 	fmt.Printf("  %s  当前: %s\n", label, currentDisplay)
 	if strings.TrimSpace(hint) != "" {
 		fmt.Printf("    提示: %s\n", hint)
@@ -60,6 +61,7 @@ func askLine(label, currentDisplay, hint string) (string, int) {
 }
 
 func askChoice(label, hint string, options []string, currentIdx int) (int, int) {
+	fmt.Println()
 	if currentIdx < 0 || currentIdx >= len(options) {
 		currentIdx = 0
 	}
@@ -91,6 +93,7 @@ func askChoice(label, hint string, options []string, currentIdx int) (int, int) 
 }
 
 func askInt(label, currentDisplay, hint string, current, min, max int) (int, int) {
+	fmt.Println()
 	fmt.Printf("  %s  当前: %s\n", label, currentDisplay)
 	if strings.TrimSpace(hint) != "" {
 		fmt.Printf("    提示: %s\n", hint)
@@ -123,6 +126,7 @@ func askInt(label, currentDisplay, hint string, current, min, max int) (int, int
 }
 
 func askFloatValue(label, currentDisplay, hint string, current, min float64) (float64, int) {
+	fmt.Println()
 	fmt.Printf("  %s  当前: %s\n", label, currentDisplay)
 	if strings.TrimSpace(hint) != "" {
 		fmt.Printf("    提示: %s\n", hint)
@@ -149,6 +153,7 @@ func askFloatValue(label, currentDisplay, hint string, current, min float64) (fl
 }
 
 func askTimeValue(label string) (int, int, int) {
+	fmt.Println()
 	fmt.Printf("  %s\n", label)
 	fmt.Println("    格式: 小时:分钟，如 9:30 或 09:30（00:00-23:59）")
 	for {
@@ -176,6 +181,7 @@ func askTimeValue(label string) (int, int, int) {
 }
 
 func sectionHeader(title string) {
+	fmt.Println()
 	fmt.Println(colorize("---------- "+title+" ----------", ansiBold+ansiCyan))
 }
 
@@ -473,7 +479,13 @@ func runSettingsWizard(fileCfg *cliFileConfig) int {
 	if isNSB {
 		delayCurrent = fileCfg.NSBDelay
 	}
-	n, o := askInt("扫描合格延迟", fmt.Sprintf("%dms", delayCurrent), "TCPing/HTTPing 延迟超过该值视为不合格（毫秒）", delayCurrent, 1, 0)
+	delayMin := 1
+	delayHint := "TCPing/HTTPing 延迟超过该值视为不合格（毫秒）"
+	if isNSB {
+		delayMin = 0
+		delayHint = "TCPing/HTTPing 延迟超过该值视为不合格（毫秒）；0=不筛延迟"
+	}
+	n, o := askInt("扫描合格延迟", fmt.Sprintf("%dms", delayCurrent), delayHint, delayCurrent, delayMin, 0)
 	if o != promptOK {
 		return o
 	}
