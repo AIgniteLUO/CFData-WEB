@@ -2842,7 +2842,7 @@
             if (tls !== undefined) result.nsb.tls = tls === true || String(tls).toLowerCase() === 'true' || String(tls) === '1' ? 'on' : 'off';
             const compact = pick(c, ['nsbcompact', 'compact']);
             if (compact !== undefined) result.nsb.compactView = compact === true || String(compact).toLowerCase() === 'true' || String(compact) === '1' ? 'compact' : 'full';
-            result.nsb.outFile = pick(c, ['nsbout', 'out']);
+            result.nsb.outFile = pick(c, ['out', 'nsbout', 'offout']);
             result.nsb.sourceUrl = pick(c, ['nsbsourceurl', 'sourceurl']);
             return result;
         }

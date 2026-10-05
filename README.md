@@ -10,6 +10,15 @@ CFData-Web 是一个基于 Go 的 Cloudflare IP 测试与筛选工具，提供�
 
 项目功能已趋于完善，基本达到了作者预期的效果。后续更新将以维护和新功能为主，版本迭代频率会有所降低。如果你在使用过程中有新的需求或建议，欢迎提交 Issue，作者会在评估后酌情纳入后续版本。
 
+近期主要更新：
+
+- CLI 交互菜单：`-cli` 进入菜单（按配置启动 / 自定义参数启动 / 修改配置参数 / 定时任务 / 帮助），`-cli qs` 按已保存配置快速启动，`-cli -参数…` 直接执行；启动时输出 Banner 与「调试等级」
+- 参数设置向导：分模块逐项设置，提示格式与可选值，可保存为配置文件
+- 定时任务：仅 Linux systemd，按天/周/月执行，开机自启，失败自动回滚清理，unit 与日志在程序目录
+- 官方/非标的扫描并发、延迟阈值、测速网址在命令行与配置文件中完全独立，互不影响
+- 配置文件自动迁移：键名无变化时静默按新模板迁移；存在旧键名时交互提示（仅迁移同名值），原文件备份为 `.bak`，非交互环境自动跳过
+- 启动输出统一为简洁的「当前配置」单块，版本行下方显示调试等级
+
 ## 功能
 
 - 官方优选：扫描 Cloudflare IPv4/IPv6，按数据中心继续详细延迟测试。
@@ -17,6 +26,7 @@ CFData-Web 是一个基于 Go 的 Cloudflare IP 测试与筛选工具，提供�
 - 测速：支持单点测速、批量测速、非标并发测速和测速阈值筛选。
 - 导出：支持 CSV/TXT、自定义字段、IP 类型筛选、合格结果筛选。
 - 上传：支持将导出结果上传到 GitHub。
+- CLI：交互菜单、参数设置向导、定时任务、配置自动迁移。
 - APK：支持 Android WebView 壳运行内置后端。
 
 ## 快速开始
@@ -32,25 +42,30 @@ CFData-Web 是一个基于 Go 的 Cloudflare IP 测试与筛选工具，提供�
 
 浏览器打开终端中的地址即可使用。
 
-CLI 模式：
+CLI 模式（进入交互菜单）：
 
 ```bash
 ./cfdata-linux-amd64 -cli
 ```
 
-首次使用 CLI 配置文件时会生成模板并退出，编辑配置后重新运行即可。
+菜单提供：按配置启动（菜单 1，等价 `-cli qs`）、自定义参数启动（向导）、修改配置参数、定时任务、帮助。
+
+首次使用 CLI 配置文件时会生成模板并退出，编辑配置后重新运行即可；也可通过菜单「修改配置参数」逐项设置。升级后启动时若配置键名有变化会提示迁移：同名值保留，原文件备份为 `.bak`，非交互环境自动跳过。
 
 简单示例：
 
 ```bash
-# 默认 CLI：按命令行 > 配置文件 > 环境变量 > 默认值自动运行
+# 交互菜单（不带其他参数时默认进入菜单）
 ./cfdata-linux-amd64 -cli
 
-# 官方模式：扫描 IPv4，测试 443 端口，测速地址自动选择
+# 按已保存配置快速启动（qs 大小写不敏感）
+./cfdata-linux-amd64 -cli qs
+
+# 官方模式直接执行：扫描 IPv4，测试 443 端口，测速地址自动选择
 ./cfdata-linux-amd64 -cli -mode official -offiptype 4 -offport 443 -offurl auto
 
-# 非标模式：读取本地文件，开启 TLS 和 5 个测速线程
-./cfdata-linux-amd64 -cli -mode nsb -nsbfile ip.txt -nsbtls=true -nsbspeedtest 5 -offurl auto
+# 非标模式直接执行：读取本地文件，开启 TLS 和 5 个测速线程
+./cfdata-linux-amd64 -cli -mode nsb -nsbfile ip.txt -nsbtls=true -nsbspeedtest 5 -nsburl auto
 ```
 
 ## Web 使用
@@ -123,13 +138,13 @@ CLI 可通过 `-offurl`/`-nsburl` 指定：
 -nsbthreads       非标扫描并发数
 -offport          官方测试/测速端口
 -offdelay         官方延迟阈值，单位毫秒
--nsbdelay         非标延迟阈值，单位毫秒
+-nsbdelay         非标延迟阈值，单位毫秒；0=不筛延迟
 -offurl           官方测速下载地址，默认 auto
 -nsburl           非标测速下载地址，默认 auto
 -dns              自定义 DNS 服务器
 -debug            调试日志等级：false、error、all
--offout           官方输出文件名
--nsbout           非标输出文件名
+-skipgeo          跳过地区/代理环境验证（启动时不再提示代理警告）
+-out              输出文件名（官方/非标通用），默认 cfdata-results
 ```
 
 非标常用参数：

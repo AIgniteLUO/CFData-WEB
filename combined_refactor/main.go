@@ -17,7 +17,7 @@ import (
 
 var webUser, webPassword string
 var webSessionMinutes int
-var boolFlagNames = []string{"cli", "nsbtls", "progress", "nocolor", "compactipv4", "nsbcompact", "github", "nsbqualified", "skipgeo", "v6bracket", "edgetunnel"}
+var boolFlagNames = []string{"cli", "nsbtls", "progress", "nocolor", "compactipv4", "nsbcompact", "github", "skipgeo", "outv6bracket", "edgetunnel"}
 
 type latestReleaseInfo struct {
 	TagName string `json:"tag_name"`
@@ -168,14 +168,23 @@ func main() {
 			customDNSForced = true
 		}
 	})
+	printBanner()
+	enterMenu := false
 	if cliCfg.enabled {
-		if err := prepareCLIConfig(cliCfg); err != nil {
-			if errors.Is(err, errCLIConfigCreated) {
+		args := flag.Args()
+		quickStart := len(args) > 0 && strings.EqualFold(strings.TrimSpace(args[0]), "qs")
+		if !quickStart && onlyCLIArgProvided() {
+			enterMenu = true
+		}
+		if !enterMenu {
+			if err := prepareCLIConfig(cliCfg); err != nil {
+				if errors.Is(err, errCLIConfigCreated) {
+					return
+				}
+				recordProgramDebugError("cli_prepare", err.Error())
+				fmt.Printf("CLI 执行失败: %v\n", err)
 				return
 			}
-			recordProgramDebugError("cli_prepare", err.Error())
-			fmt.Printf("CLI 执行失败: %v\n", err)
-			return
 		}
 	}
 	speedTestWorkers = cliCfg.speedTest
@@ -207,6 +216,10 @@ func main() {
 	}
 	initLocations()
 	if cliCfg.enabled {
+		if enterMenu {
+			runCLIMenu(cliCfg)
+			return
+		}
 		if err := runCLI(cliCfg); err != nil {
 			recordProgramDebugError("cli_run", err.Error())
 			fmt.Printf("CLI 执行失败: %v\n", err)
