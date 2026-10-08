@@ -310,6 +310,11 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil {
+		// 必须非零退出：容器编排判断异常靠的就是退出码，
+		// 退 0 会让端口被占用之类的故障表现为「安静地反复重启」，在 docker ps 里只看到 Exited (0)。
+		// 当前没有任何优雅停机路径，ListenAndServe 只会在出错时返回（http.ErrServerClosed 不可达）；
+		// 日后若加入 Shutdown，记得在里面放行该错误再退出。
 		fmt.Printf("启动失败: %v\n", err)
+		os.Exit(1)
 	}
 }
