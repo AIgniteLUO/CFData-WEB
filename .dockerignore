@@ -1,0 +1,43 @@
+# 注意：combined_refactor/ 下的 index.html、login.html、favicon.png、ca-certificates.crt
+# 都是 go:embed 的编译期输入，绝对不能排除，否则 go build 直接失败。
+
+# 版本控制与 CI（不进镜像，也不用参与构建）
+.git
+.gitignore
+.github
+
+# 与镜像无关的产物与素材
+app/
+release_assets/
+build/
+bin/
+dist/
+img/
+
+# 文档与本地环境
+AGENTS.md
+README.md
+.env
+.env.*
+docker-compose.yml
+build-image.sh
+
+# Go 编译产物与运行期缓存（都应在容器内重新生成，避免把本机文件带进镜像）
+combined_refactor/cfdata
+combined_refactor/cfdata-*
+combined_refactor/cfdata-config.json
+combined_refactor/cfdata-debug.log
+combined_refactor/ips-v4.txt
+combined_refactor/ips-v6.txt
+combined_refactor/locations.json
+combined_refactor/*.mmdb
+combined_refactor/*.csv
+combined_refactor/*.txt
+
+# 编辑器与系统文件
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*Zone.Identifier*

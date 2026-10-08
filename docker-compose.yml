@@ -1,0 +1,67 @@
+# CFData-WEB 服务端部署
+#
+#   cp .env.example .env     # 按需修改，尤其别忘了认证
+#   docker compose pull
+#   docker compose up -d
+#   docker compose logs -f
+#
+# 镜像由仓库根目录的 build-image.sh 构建并推送到 registry.vxk8s.com。
+
+# 钉住项目名：否则项目名随部署目录名变化，卷名跟着变，
+# 换个目录部署就会静默生成一个新卷，之前下载的缓存看起来「丢了」。
+name: cfdata-web
+
+services:
+  cfdata:
+    image: registry.vxk8s.com/cfdata-web/cfdata-web:${CFDATA_TAG:-latest}
+    container_name: cfdata
+    restart: unless-stopped
+    platform: linux/amd64
+
+    # 容器内固定监听 13335，这里只决定宿主机端口。
+    # 注意不要把 CFDATA_PORT 传进容器：一旦容器内端口与写死的 13335 不一致，
+    # 就会出现「端口映射看起来正常、实际连不上」的坑。
+    ports:
+      - "${CFDATA_HOST_PORT:-13335}:13335"
+      # 公网部署更推荐只在本机暴露，前面挂 Caddy/nginx 做 TLS 终止：
+      # - "127.0.0.1:${CFDATA_HOST_PORT:-13335}:13335"
+
+    environment:
+      # 默认关闭认证。公网部署务必设置，否则任何人都能直接拿你的服务器跑扫描和测速。
+      # 密码里含 $ 必须写成 $$，否则会被 compose 当成变量插值截断。
+      # 用户名与密码需同时设置才会生效；留空等同于未设置。
+      CFDATA_USER: ${CFDATA_USER:-}
+      CFDATA_PASSWORD: ${CFDATA_PASSWORD:-}
+      CFDATA_SESSION: ${CFDATA_SESSION:-}
+      CFDATA_DEBUG: ${CFDATA_DEBUG:-}
+      CFDATA_SKIPGEO: ${CFDATA_SKIPGEO:-}
+
+    volumes:
+      # 地址库 / 地区库 / ASN 库 / 调试日志都写在工作目录，持久化后重建容器不必重新下载
+      - cfdata-data:/app/data
+
+    # 程序只做普通 TCP 连接与 DNS 解析，不需要任何 Linux capability
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # healthcheck 由镜像内置（探测不经过认证的 /favicon.png，并跟随 CFDATA_PORT），
+    # 这里不重复声明，避免与镜像里的定义不一致。
+
+    # 容器 stdout 日志加个上限，避免长期运行把宿主磁盘写满
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # 想要更准的延迟与测速结果，可以改用宿主网络绕开 bridge NAT 的额外开销：
+    # network_mode: host
+    # 启用后上面的 ports 段会失效，容器直接占用宿主的 13335 端口。
+    #
+    # IPv6：容器内测试 Cloudflare IPv6 地址段需要宿主 Docker daemon 启用 IPv6，
+    # 即 /etc/docker/daemon.json 中配置 "ipv6": true 与 "fixed-cidr-v6"，否则 IPv6 结果会全部失败。
+
+volumes:
+  cfdata-data:

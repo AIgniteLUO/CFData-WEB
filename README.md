@@ -12,6 +12,7 @@ CFData-Web 是一个基于 Go 的 Cloudflare IP 测试与筛选工具，提供�
 
 近期主要更新：
 
+- Docker 部署：新增 `Dockerfile`、`docker-compose.yml` 与构建推送脚本 `build-image.sh`，镜像推到私有仓库；新增 `CFDATA_` 前缀环境变量传参（命令行参数优先级更高）
 - CLI 交互菜单：`-cli` 进入菜单（按配置启动 / 自定义参数启动 / 修改配置参数 / 定时任务 / 帮助），`-cli qs` 按已保存配置快速启动，`-cli -参数…` 直接执行；启动时输出 Banner 与「调试等级」
 - 参数设置向导：分模块逐项设置，提示格式与可选值，可保存为配置文件
 - 定时任务：仅 Linux systemd，按天/周/月执行，开机自启，失败自动回滚清理，unit 与日志在程序目录
@@ -28,6 +29,7 @@ CFData-Web 是一个基于 Go 的 Cloudflare IP 测试与筛选工具，提供�
 - 上传：支持将导出结果上传到 GitHub。
 - CLI：交互菜单、参数设置向导、定时任务、配置自动迁移。
 - APK：支持 Android WebView 壳运行内置后端。
+- Docker：Docker Compose 部署，镜像可推送到私有仓库；支持用环境变量传参。
 
 ## 快速开始
 
@@ -67,6 +69,84 @@ CLI 模式（进入交互菜单）：
 # 非标模式直接执行：读取本地文件，开启 TLS 和 5 个测速线程
 ./cfdata-linux-amd64 -cli -mode nsb -nsbfile ip.txt -nsbtls=true -nsbspeedtest 5 -nsburl auto
 ```
+
+## Docker 部署
+
+适合在服务器上长期运行。镜像位于私有仓库 `registry.vxk8s.com/cfdata-web/cfdata-web`。
+
+### 服务器部署
+
+```bash
+cp .env.example .env     # 按需修改，公网部署务必设置认证
+docker compose pull
+docker compose up -d
+docker compose logs -f
+```
+
+宿主机端口由 `.env` 中的 `CFDATA_HOST_PORT` 决定（默认 13335），容器内固定监听 13335。
+
+### 环境变量
+
+优先级：命令行参数 > 环境变量 > 默认值。变量统一使用 `CFDATA_` 前缀，避免与容器内其他工具的环境变量撞名。
+
+```text
+CFDATA_PORT        容器内监听端口，默认 13335
+                   compose 部署不必改这项，宿主端口请用 .env 的 CFDATA_HOST_PORT
+CFDATA_HOST        监听地址，默认空（监听全部地址）
+CFDATA_USER        Web 认证用户名，默认空（不启用认证）
+CFDATA_PASSWORD    Web 认证密码，需与 CFDATA_USER 同时设置
+CFDATA_SESSION     登录会话有效期（分钟），默认 720
+CFDATA_DEBUG       调试等级：error 或 all，默认关闭
+CFDATA_SKIPGEO     跳过地区/代理环境验证，默认 false
+```
+
+空值等同于未设置；非法值只打印告警并忽略，不会导致启动失败。`CFDATA_DEBUG` 只接受能明确识别的值（`error`、`all`、`true`/`false` 等），写错不会静默把调试日志打开。
+
+环境变量能让密码不出现在 `docker ps` 输出和进程命令行里，但 `docker inspect` 与 `.env` 文件仍可读到，属于配置传递而非密钥托管。有更高保密要求时请改用 Docker secrets。
+
+### 数据持久化
+
+`/app/data` 是程序的工作目录，地址库 `ips-v4.txt`/`ips-v6.txt`、地区库 `locations.json`、ASN 库 `GeoLite2-ASN.mmdb`、调试日志 `cfdata-debug.log`，以及导出与上传用的结果文件都写在这里，由具名卷 `cfdata-data` 持久化，重建容器无需重新下载。
+
+取出结果文件：
+
+```bash
+docker compose cp cfdata:/app/data/. ./data        # 整个目录拷出来
+docker compose exec cfdata ls -la /app/data        # 或者先看看有什么
+```
+
+若改用 bind mount（如 `./data:/app/data`），宿主目录默认归 root，容器里的 uid 10001 写不进去，表现为每次重建容器都要重新下载缓存；需要先 `mkdir -p data && sudo chown 10001:10001 data`。
+
+`cfdata-config.json` 落在 `/app`（可执行文件所在目录）。Web 模式下它只是首次启动生成的默认模板、界面只读，重建容器会重新生成一份等价模板（其中 `_config_version` 跟随版本号），因此不必单独挂卷。
+
+### 自行构建与推送
+
+```bash
+docker login registry.vxk8s.com
+./build-image.sh              # 构建 linux/amd64，打「版本号」与 latest 两个 tag 并推送
+./build-image.sh --local      # 只构建并载入本机，不推送（本地验证用）
+VERSION=v1.2.3 ./build-image.sh
+```
+
+版本号默认取 `git describe --tags --always`，工作区有改动时追加 `-dirty`。国内构建可换 Go 模块源：`GOPROXY=https://goproxy.cn,direct ./build-image.sh`。
+
+推送会同时覆盖 `:latest`，脚本默认拦截非 `linux/amd64` 的推送（服务器拉取的正是 amd64 的 `latest`，用别的架构覆盖会让它拿到跑不起来的镜像），确实需要时设置 `ALLOW_FOREIGN_PLATFORM=1`。
+
+### 公网部署建议
+
+镜像默认不启用认证且监听全部地址，直接暴露到公网等于把扫描与测速能力开放给任何人。建议：
+
+1. 设置 `CFDATA_USER` 与 `CFDATA_PASSWORD`。
+2. 只在本机暴露端口，前面挂 Caddy/nginx 做 TLS 终止 —— `docker-compose.yml` 的 `ports` 段已给出注释掉的 `127.0.0.1:` 写法。
+3. 注意：程序自身不支持 TLS，判定 cookie 是否加 `Secure` 依据的是 `r.TLS`，反向代理终止 TLS 时它永远为 false。也就是说即使套了 HTTPS，会话 cookie 也不会带 `Secure` 标记，请确保从代理到容器的这一段不经过不可信网络（同机部署即可满足）。
+
+### 注意事项
+
+- **IPv6**：容器内测试 Cloudflare IPv6 地址段需要宿主 Docker daemon 启用 IPv6（`/etc/docker/daemon.json` 配置 `"ipv6": true` 与 `"fixed-cidr-v6"`），否则 IPv6 结果会全部失败。
+- **测速精度**：默认 bridge 网络的 NAT 会带来额外开销。需要更准确的结果，可在 `docker-compose.yml` 中启用 `network_mode: host`（启用后 `ports` 段失效，容器直接占用宿主 13335 端口）。
+- **密码含 `$`**：写在 `.env` 里必须写成 `$$`，否则会被 compose 当成变量插值截断，症状是「密码明明填对了却登不进去」。
+- **健康检查**：由镜像内置，探测不经过认证的 `/favicon.png`，并跟随 `CFDATA_PORT`，compose 中无需重复声明。
+- 容器以非 root（uid 10001）运行，二进制归 root 所有、内容不可被应用改写。
 
 ## Web 使用
 

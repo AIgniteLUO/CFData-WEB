@@ -139,13 +139,9 @@ func hasNoColorArg() bool {
 	return false
 }
 
-func main() {
-	rewriteBoolFlagArgs()
-	if !enableTerminalANSI() || os.Getenv("NO_COLOR") != "" || hasNoColorArg() {
-		disableANSIColors()
-	}
-	cliCfg := registerCLIFlags()
-
+// registerServerFlags 注册 Web 服务侧参数。
+// 注册时写入的默认值会同时影响命令行帮助与配置文件模板，改动前先看 env_test.go 的默认值断言。
+func registerServerFlags() {
 	flag.IntVar(&listenPort, "port", 13335, "服务监听端口")
 	flag.StringVar(&listenHost, "host", "", "服务监听地址；留空监听全部地址，Android APK 建议使用 127.0.0.1")
 	flag.StringVar(&speedTestURL, "url", autoSpeedURLValue, "测速下载地址；auto 表示由后端自动选择内置测速源")
@@ -155,7 +151,27 @@ func main() {
 	flag.StringVar(&webUser, "user", "", "Web 认证用户名（不设置则不启用认证）")
 	flag.StringVar(&webPassword, "password", "", "Web 认证密码（需同时设置 -user）")
 	flag.IntVar(&webSessionMinutes, "session", 720, "Web 登录会话有效期（分钟）")
+}
+
+// parseServerFlags 按固定顺序注册并解析服务侧参数。
+//
+// 这个顺序本身就是「命令行参数 > 环境变量 > 默认值」的实现方式，不要调换：
+// 注册时把默认值写进变量，Parse 只覆盖命令行里真正出现的参数，中途写入的环境变量
+// 因此既压得住默认值、又让得出命令行参数。顺序只在这里出现一次，main() 与
+// env_test.go 的 TestServerFlagContract 共用它，所以调换顺序会立刻让测试变红。
+func parseServerFlags() {
+	registerServerFlags()
+	applyEnvDefaults()
 	flag.Parse()
+}
+
+func main() {
+	rewriteBoolFlagArgs()
+	if !enableTerminalANSI() || os.Getenv("NO_COLOR") != "" || hasNoColorArg() {
+		disableANSIColors()
+	}
+	cliCfg := registerCLIFlags()
+	parseServerFlags()
 	if debugMode && flag.NArg() > 0 {
 		for _, arg := range flag.Args() {
 			if normalizeDebugLevel(arg) == "all" {
