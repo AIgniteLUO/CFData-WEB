@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// cloudflareTraceURL 用于读取当前出口 IP 所属地区。
+var cloudflareTraceURL = "https://www.cloudflare.com/cdn-cgi/trace"
+
 func shouldWarnProxyCountry(country string) bool {
 	country = strings.ToUpper(strings.TrimSpace(country))
 	return country == "" || (country != "CN" && country != "XX" && country != "T1")
@@ -30,12 +33,14 @@ func detectCloudflareTraceCountry(ctx context.Context) (string, bool) {
 }
 
 func detectCloudflareTraceCountryOnce(ctx context.Context) (string, bool, string) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.cloudflare.com/cdn-cgi/trace", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cloudflareTraceURL, nil)
 	if err != nil {
 		return "", false, err.Error()
 	}
 	req.Header.Set("User-Agent", "CFData-WEB/"+appVersion)
-	resp, err := upstreamHTTPClient.Do(req)
+	// 刻意用直连客户端：这个探测的职责是判断「测速那条路径」的出口地区，
+	// 而测速与扫描并不走代理，走代理会报出用户根本没配置的代理警告。
+	resp, err := directUpstreamHTTPClient.Do(req)
 	if err != nil {
 		recordDebugError("proxy_country_check", err.Error())
 		return "", false, err.Error()

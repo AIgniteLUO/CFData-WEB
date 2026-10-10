@@ -13,19 +13,81 @@ import (
 	"time"
 )
 
-var upstreamHTTPClient = &http.Client{Timeout: 20 * time.Second}
+var (
+	upstreamHTTPClient = &http.Client{Timeout: 20 * time.Second}
 
-func configureHTTPClients() {
-	initCustomResolver()
+	// directUpstreamHTTPClient 与 upstreamHTTPClient 同源，但显式清空了 Proxy。
+	//
+	// 它专供「网络身份探测」使用 —— 地区判定与 ISP 判定。这两个探测的职责是代表测速
+	// 那条路径说话，而测速与扫描用的是自建的 &http.Transport{} 字面量，Proxy 为空且
+	// 直接拨 IP，从不受 HTTP_PROXY 影响。探测一旦走了代理，就会拿代理出口的国家去判定
+	// 一条直连路径，报出用户根本没有配置的代理警告；ISP 判定同样会被带偏，让「自动选择
+	// 测速源」依据代理出口的运营商做决定（国内用户因此永远选不到「移动专属」）。
+	//
+	// 会踩到这个坑的机制：http.DefaultTransport 自带 Proxy: ProxyFromEnvironment，
+	// Clone() 会把它一并复制过来。而 Docker 会读取 ~/.docker/config.json 的 proxies 段，
+	// 自动把 HTTP_PROXY/HTTPS_PROXY 注入容器 —— 用户 compose 里一个字都不写也会中招。
+	directUpstreamHTTPClient = &http.Client{Timeout: 20 * time.Second}
+)
+
+// locationsURL 是数据中心位置库的下载地址。
+var locationsURL = "https://www.baipiao.eu.org/cloudflare/locations"
+
+// newUpstreamTransport 构造与 http.DefaultTransport 同配置的 transport。
+// 它保留自带的 ProxyFromEnvironment，调用方若要求直连须自行把 Proxy 置为 nil。
+func newUpstreamTransport() *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = dialContext
 	transport.TLSClientConfig = tlsConfigWithRootCAs("")
-	upstreamHTTPClient.Transport = wrapDebugTransport("upstream", transport)
+	return transport
+}
+
+func configureHTTPClients() {
+	initCustomResolver()
+
+	// 保留代理支持：GitHub 上传、edgetunnel 读写、更新检查这些场景，国内用户往往确实需要挂代理。
+	upstreamHTTPClient.Transport = wrapDebugTransport("upstream", newUpstreamTransport())
+
+	direct := newUpstreamTransport()
+	direct.Proxy = nil
+	directUpstreamHTTPClient.Transport = wrapDebugTransport("upstream-direct", direct)
+
+	if description := effectiveProxyDescription(upstreamHTTPClient, ispProbeURL); description != "" {
+		fmt.Printf("出网代理: %s\n", description)
+		fmt.Println("说明: GitHub 上传等请求会经此代理；地区与 ISP 探测已强制直连，与测速路径一致")
+	}
+}
+
+// effectiveProxyDescription 返回该客户端会为这个目标地址使用的代理，直连时返回空串。
+// 问的是 transport 本身而非环境变量，因此拿到的是真实生效值（含 NO_PROXY 的排除判断）。
+func effectiveProxyDescription(client *http.Client, targetURL string) string {
+	transport, ok := unwrapTransport(client.Transport)
+	if !ok || transport.Proxy == nil {
+		return ""
+	}
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		return ""
+	}
+	proxyURL, err := transport.Proxy(req)
+	if err != nil || proxyURL == nil {
+		return ""
+	}
+	return proxyURL.String()
+}
+
+// unwrapTransport 剥掉调试包装，取出真正的 *http.Transport。
+func unwrapTransport(rt http.RoundTripper) (*http.Transport, bool) {
+	if wrapped, ok := rt.(debugRoundTripper); ok {
+		rt = wrapped.next
+	}
+	transport, ok := rt.(*http.Transport)
+	return transport, ok
 }
 
 func initLocations() {
 	filename := "locations.json"
-	url := "https://www.baipiao.eu.org/cloudflare/locations"
+	url := locationsURL
 	var locations []location
 	var body []byte
 	var err error
@@ -168,11 +230,21 @@ func getURLBytes(targetURL string) ([]byte, error) {
 }
 
 func getURLBytesWithContext(ctx context.Context, targetURL string) ([]byte, error) {
+	return fetchURLBytes(ctx, upstreamHTTPClient, targetURL)
+}
+
+// getURLBytesDirectWithContext 走直连客户端，专供网络身份探测使用。
+// 理由见 directUpstreamHTTPClient 的说明：探测必须与测速走同一条路径。
+func getURLBytesDirectWithContext(ctx context.Context, targetURL string) ([]byte, error) {
+	return fetchURLBytes(ctx, directUpstreamHTTPClient, targetURL)
+}
+
+func fetchURLBytes(ctx context.Context, client *http.Client, targetURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := upstreamHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

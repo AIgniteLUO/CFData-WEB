@@ -98,7 +98,9 @@ func detectSpeedTestISP(ctx context.Context) (ispProbeInfo, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	data, err := getURLBytesWithContext(ctx, ispProbeURL)
+	// 同样走直连：ISP 判定的结论会被用来挑选自动测速源，
+	// 一旦被代理带偏（代理出口通常是境外机房），移动用户就永远选不到「移动专属」。
+	data, err := getURLBytesDirectWithContext(ctx, ispProbeURL)
 	if err != nil {
 		return ispProbeInfo{}, err
 	}
