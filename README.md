@@ -146,6 +146,7 @@ VERSION=v1.2.3 ./build-image.sh
 - **测速精度**：默认 bridge 网络的 NAT 会带来额外开销。需要更准确的结果，可在 `docker-compose.yml` 中启用 `network_mode: host`（启用后 `ports` 段失效，容器直接占用宿主 13335 端口）。
 - **密码含 `$`**：写在 `.env` 里必须写成 `$$`，否则会被 compose 当成变量插值截断，症状是「密码明明填对了却登不进去」。
 - **健康检查**：由镜像内置，探测不经过认证的 `/favicon.png`，并跟随 `CFDATA_PORT`，compose 中无需重复声明。
+- **宿主机透明代理**：若宿主机运行 v2raya 等透明代理，其 iptables-legacy 规则会把所有 TCP 流量重定向到本地代理，容器流量也会被一并劫持。表现为地区判定读到境外标签、ISP 判定读到境外机房、测速结果失真，而容器内却查不到任何代理环境变量。处理办法见 [`deploy/v2raya-proxy-bypass/`](deploy/v2raya-proxy-bypass/README.md)。
 - 容器以非 root（uid 10001）运行，二进制归 root 所有、内容不可被应用改写。
 
 ## Web 使用
