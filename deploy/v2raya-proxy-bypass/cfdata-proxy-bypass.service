@@ -1,0 +1,8 @@
+[Unit]
+Description=让 CFData 容器网段绕过 v2raya 透明代理
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cfdata-proxy-bypass.sh

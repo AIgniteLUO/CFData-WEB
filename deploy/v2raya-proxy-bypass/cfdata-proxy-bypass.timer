@@ -1,0 +1,10 @@
+[Unit]
+Description=定期确认 CFData 容器网段仍绕过 v2raya 透明代理
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=60s
+Unit=cfdata-proxy-bypass.service
+
+[Install]
+WantedBy=timers.target

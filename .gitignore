@@ -27,6 +27,8 @@ Thumbs.db
 release_assets/
 cfdata
 cfdata-*
+# 部署脚本需要入库，上面的 cfdata-* 会误伤
+!deploy/v2raya-proxy-bypass/cfdata-proxy-bypass.*
 !app/src/main/java/com/cfdata/
 !app/src/main/java/com/cfdata/**
 combined_refactor/cfdata
